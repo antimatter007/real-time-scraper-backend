@@ -18,14 +18,18 @@ app.use(express.json());
 // Hardcoded PostgreSQL Configuration
 const pool = new Pool({
   host: 'autorack.proxy.rlwy.net',
+  port: 20823,
   database: 'railway',
   user: 'postgres',
-  password: 'fzBKMaLxqMFZKWLXEnnAoqSwUAMslaMm',
-  port: 29248,
+  password: 'suFzdtdvTXFdhgQloNbxzOHMjLsisThP',
   ssl: {
-    rejectUnauthorized: false, // Adjust based on your PostgreSQL SSL configuration
+    rejectUnauthorized: false, // Set to true if you have proper SSL certificates
   },
 });
+
+pool.connect()
+  .then(() => console.log('Backend connected to PostgreSQL'))
+  .catch(err => console.error('Backend connection error:', err.stack));
 
 // Hardcoded RabbitMQ Configuration
 const RABBITMQ_URL = 'amqps://pcudcyxc:CT6kMcrw_pXH7kFpqzpqWgoWnu5J04LU@duck.lmq.cloudamqp.com/pcudcyxc';
