@@ -7,32 +7,33 @@ const cors = require('cors');
 
 const app = express();
 
-// Middleware
+// Middleware Configuration
 app.use(cors({
-  origin: 'https://real-time-twitter-scraper-frontend.vercel.app', // Replace with your actual frontend URL
+  origin: 'https://real-time-twitter-scraper-frontend.vercel.app', // Your frontend's production URL
   methods: ['GET', 'POST'],
   credentials: true,
 }));
 app.use(express.json());
 
-// Production PostgreSQL Database URL from Railway
-const DATABASE_URL = 'postgresql://postgres:fzBKMaLxqMFZKWLXEnnAoqSwUAMslaMm@autorack.proxy.rlwy.net:29248/railway';
-
-// Configure the PostgreSQL pool with production credentials
+// Hardcoded PostgreSQL Configuration
 const pool = new Pool({
-  connectionString: DATABASE_URL,
+  host: 'autorack.proxy.rlwy.net',
+  database: 'railway',
+  user: 'postgres',
+  password: 'fzBKMaLxqMFZKWLXEnnAoqSwUAMslaMm',
+  port: 29248,
   ssl: {
-    rejectUnauthorized: false, // Required if Railway PostgreSQL uses self-signed certificates
+    rejectUnauthorized: false, // Adjust based on your PostgreSQL SSL configuration
   },
 });
 
-// Production RabbitMQ URL from CloudAMQP
+// Hardcoded RabbitMQ Configuration
 const RABBITMQ_URL = 'amqps://pcudcyxc:CT6kMcrw_pXH7kFpqzpqWgoWnu5J04LU@duck.lmq.cloudamqp.com/pcudcyxc';
-
-let channel;
 const queueName = 'jobs_queue';
 
-// Function to connect to RabbitMQ
+let channel;
+
+// Function to Connect to RabbitMQ
 async function connectRabbitMQ() {
   try {
     const conn = await amqp.connect(RABBITMQ_URL);
@@ -41,14 +42,14 @@ async function connectRabbitMQ() {
     console.log('Connected to RabbitMQ');
   } catch (error) {
     console.error('Failed to connect to RabbitMQ:', error);
-    process.exit(1); // Exit process if connection fails
+    process.exit(1); // Exit if connection fails
   }
 }
 
-// Initialize RabbitMQ connection
+// Initialize RabbitMQ Connection
 connectRabbitMQ();
 
-// POST /api/jobs - Submit a new scraping job
+// POST /api/jobs - Submit a New Scraping Job
 app.post('/api/jobs', async (req, res) => {
   const { query } = req.body;
 
@@ -57,7 +58,7 @@ app.post('/api/jobs', async (req, res) => {
   }
 
   try {
-    // Insert new job into the jobs table with status 'pending'
+    // Insert new job into the 'jobs' table with status 'pending'
     const result = await pool.query(
       'INSERT INTO jobs (query, status) VALUES ($1, $2) RETURNING id',
       [query, 'pending']
@@ -77,12 +78,12 @@ app.post('/api/jobs', async (req, res) => {
   }
 });
 
-// GET /api/jobs/:id - Get the status and results of a job
+// GET /api/jobs/:id - Get the Status and Results of a Job
 app.get('/api/jobs/:id', async (req, res) => {
   const { id } = req.params;
 
   try {
-    // Fetch job details from the jobs table
+    // Fetch job details from the 'jobs' table
     const jobResult = await pool.query('SELECT * FROM jobs WHERE id = $1', [id]);
 
     if (jobResult.rowCount === 0) {
@@ -92,7 +93,7 @@ app.get('/api/jobs/:id', async (req, res) => {
     const job = jobResult.rows[0];
 
     if (job.status === 'completed') {
-      // Fetch results from the results table
+      // Fetch results from the 'results' table
       const results = await pool.query('SELECT * FROM results WHERE job_id = $1', [id]);
       const formattedResults = results.rows.map(r => ({
         tweet_id: r.tweet_id,
@@ -114,8 +115,8 @@ app.get('/api/jobs/:id', async (req, res) => {
   }
 });
 
-// Start the server on port 3001
-const PORT = process.env.PORT || 3001;
+// Start the Server on Port 3001
+const PORT = 3001;
 app.listen(PORT, () => {
   console.log(`Backend listening on port ${PORT}`);
 });
