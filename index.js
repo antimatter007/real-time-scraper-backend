@@ -8,14 +8,29 @@ const cors = require('cors');
 const app = express();
 
 // Middleware Configuration
+app.use(express.json());
+
+// CORS Configuration
+const allowedOrigins = [
+  'https://real-time-twitter-scraper-frontend.vercel.app', // Production Frontend URL
+  'http://localhost:3000', // Development Frontend URL
+];
+
 app.use(cors({
-  origin: 'https://real-time-twitter-scraper-frontend.vercel.app', // Your frontend's production URL
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = `The CORS policy for this site does not allow access from the specified Origin: ${origin}`;
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
   methods: ['GET', 'POST'],
   credentials: true,
 }));
-app.use(express.json());
 
-// Hardcoded PostgreSQL Configuration
+// PostgreSQL Configuration
 const pool = new Pool({
   host: 'autorack.proxy.rlwy.net',
   port: 20823,
@@ -31,7 +46,7 @@ pool.connect()
   .then(() => console.log('Backend connected to PostgreSQL'))
   .catch(err => console.error('Backend connection error:', err.stack));
 
-// Hardcoded RabbitMQ Configuration
+// RabbitMQ Configuration
 const RABBITMQ_URL = 'amqps://pcudcyxc:CT6kMcrw_pXH7kFpqzpqWgoWnu5J04LU@duck.lmq.cloudamqp.com/pcudcyxc';
 const queueName = 'jobs_queue';
 
@@ -156,9 +171,10 @@ app.get('/api/jobs/:id', async (req, res) => {
   }
 });
 
+// GET /api/search-history - Fetch recent search queries
 app.get('/api/search-history', async (req, res) => {
   try {
-    // Optional: Allow specifying the number of results via query parameters
+    // Allow specifying the number of results via query parameters
     const limit = parseInt(req.query.limit, 10) || 10;
 
     // Fetch distinct queries ordered by most recent updated_at, limited by 'limit'
