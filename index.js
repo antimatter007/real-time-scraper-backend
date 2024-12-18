@@ -53,7 +53,7 @@ async function connectRabbitMQ() {
 // Initialize RabbitMQ Connection
 connectRabbitMQ();
 
-// POST /api/jobs - Submit a New Scraping Job
+// POST /api/jobs - Submit a New Scraping Job or Return Cached Results
 app.post('/api/jobs', async (req, res) => {
   const { query } = req.body;
 
@@ -62,7 +62,44 @@ app.post('/api/jobs', async (req, res) => {
   }
 
   try {
-    // Insert new job into the 'jobs' table with status 'pending'
+    // Normalize the query for consistent caching (e.g., trim and lowercase)
+    const normalizedQuery = query.trim().toLowerCase();
+
+    // Check for a cached job: same query, status 'completed', within last 24 hours
+    const cachedJobResult = await pool.query(
+      `SELECT id FROM jobs 
+       WHERE LOWER(query) = $1 AND status = $2 AND updated_at >= NOW() - INTERVAL '24 HOURS'
+       ORDER BY updated_at DESC LIMIT 1`,
+      [normalizedQuery, 'completed']
+    );
+
+    if (cachedJobResult.rowCount > 0) {
+      const cachedJobId = cachedJobResult.rows[0].id;
+      console.log(`Returning cached job ${cachedJobId} for query "${query}"`);
+
+      // Fetch results for the cached job
+      const results = await pool.query(
+        'SELECT tweet_id, tweet_text, author_handle, timestamp FROM results WHERE job_id = $1',
+        [cachedJobId]
+      );
+
+      const formattedResults = results.rows.map(r => ({
+        tweet_id: r.tweet_id,
+        tweet_text: r.tweet_text,
+        author_handle: r.author_handle,
+        timestamp: r.timestamp,
+      }));
+
+      // Return the cached results directly
+      return res.status(200).json({
+        jobId: cachedJobId,
+        cached: true,
+        status: 'completed',
+        results: formattedResults,
+      });
+    }
+
+    // If no cached data, proceed to create a new job
     const result = await pool.query(
       'INSERT INTO jobs (query, status) VALUES ($1, $2) RETURNING id',
       [query, 'pending']
@@ -70,12 +107,12 @@ app.post('/api/jobs', async (req, res) => {
     const jobId = result.rows[0].id;
 
     // Send job to RabbitMQ queue
-    const jobData = { jobId, query };
+    const jobData = { jobId, query: normalizedQuery };
     channel.sendToQueue(queueName, Buffer.from(JSON.stringify(jobData)), { persistent: true });
 
     console.log(`Job ${jobId} submitted with query "${query}"`);
 
-    res.status(201).json({ jobId });
+    res.status(201).json({ jobId, cached: false });
   } catch (error) {
     console.error('Error submitting job:', error);
     res.status(500).json({ error: 'Failed to submit job.' });
@@ -98,7 +135,7 @@ app.get('/api/jobs/:id', async (req, res) => {
 
     if (job.status === 'completed') {
       // Fetch results from the 'results' table
-      const results = await pool.query('SELECT * FROM results WHERE job_id = $1', [id]);
+      const results = await pool.query('SELECT tweet_id, tweet_text, author_handle, timestamp FROM results WHERE job_id = $1', [id]);
       const formattedResults = results.rows.map(r => ({
         tweet_id: r.tweet_id,
         tweet_text: r.tweet_text,
