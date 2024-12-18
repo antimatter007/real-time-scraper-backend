@@ -156,6 +156,29 @@ app.get('/api/jobs/:id', async (req, res) => {
   }
 });
 
+app.get('/api/search-history', async (req, res) => {
+  try {
+    // Optional: Allow specifying the number of results via query parameters
+    const limit = parseInt(req.query.limit, 10) || 10;
+
+    // Fetch distinct queries ordered by most recent updated_at, limited by 'limit'
+    const historyResult = await pool.query(`
+      SELECT DISTINCT ON (LOWER(query)) query, updated_at
+      FROM jobs
+      WHERE status = 'completed'
+      ORDER BY LOWER(query), updated_at DESC
+      LIMIT $1
+    `, [limit]);
+
+    const history = historyResult.rows.map(row => row.query);
+
+    res.json({ history });
+  } catch (error) {
+    console.error('Error fetching search history:', error);
+    res.status(500).json({ error: 'Failed to fetch search history.' });
+  }
+});
+
 // Start the Server on Port 3001
 const PORT = 3001;
 app.listen(PORT, () => {
